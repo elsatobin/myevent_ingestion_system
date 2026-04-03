@@ -76,7 +76,7 @@ events - Fault tolerance and retries - Resume from checkpoint
 
 ## Environment Variables
 
-    DATABASE_URL=postgresql://user:password@db:5432/events_db
+    DATABASE_URL = "postgresql://username:password@my-postgres:5432/dbname"
     STREAM_URL=http://stream:8001/stream
 
 ------------------------------------------------------------------------

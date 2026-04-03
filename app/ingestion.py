@@ -2,6 +2,7 @@ import requests
 import time
 from app.db import SessionLocal
 from app.services.event_service import process_event
+from app.models import Checkpoint
 
 STREAM_URL = "https://example.com/stream"
 

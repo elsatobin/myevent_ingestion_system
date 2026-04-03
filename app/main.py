@@ -16,3 +16,7 @@ def start_consumer():
     """
     thread = Thread(target=consume_stream, daemon=True)
     thread.start()
+
+@app.get("/")
+def read_root():
+    return {"message": "API is running!"}

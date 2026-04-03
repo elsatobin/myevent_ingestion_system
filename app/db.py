@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Using PostgreSQL (can switch to SQLite for local testing)
-DATABASE_URL = "postgresql://user:password@localhost:5432/events_db"
+DATABASE_URL = "postgresql://username:password@my-postgres:5432/dbname"
 
 # Create engine
 engine = create_engine(DATABASE_URL, echo=True)

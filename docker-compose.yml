@@ -1,4 +1,30 @@
+version: "3.9"
+
 services:
-  api
-  stream
-  db
+  db:
+    image: postgres:15
+    container_name: my-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+
+  api:
+    image: my-api-image
+    container_name: api-container
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://user:password@my-postgres:5432/mydb
+    ports:
+      - "8000:8000"
+
+  stream:
+    image: my-stream-image
+    container_name: stream-container
+    depends_on:
+      - db
+    ports:
+      - "8001:8001"
