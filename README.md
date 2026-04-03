@@ -76,8 +76,8 @@ events - Fault tolerance and retries - Resume from checkpoint
 
 ## Environment Variables
 
-    DATABASE_URL = "postgresql://username:password@my-postgres:5432/dbname"
-    STREAM_URL=http://stream:8001/stream
+    DATABASE_URL="postgresql+asyncpg://user:password@my-postgres:5432/mydb"
+    STREAM_URL=http://stream-container:8001/stream
 
 ------------------------------------------------------------------------
 

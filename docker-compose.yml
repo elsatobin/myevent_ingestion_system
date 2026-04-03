@@ -1,4 +1,5 @@
-# docker-compose.yml
+version: "3.9"
+
 services:
   my-postgres:
     image: postgres:15
@@ -9,8 +10,6 @@ services:
       POSTGRES_DB: mydb
     ports:
       - "5432:5432"
-    networks:
-      - my-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user"]
       interval: 5s
@@ -19,31 +18,26 @@ services:
   api-container:
     build:
       context: .
-      dockerfile: ./Dockerfile.api   # Dockerfile 위치 수정
+      dockerfile: Dockerfile.api
     container_name: api-container
     environment:
       DATABASE_URL: postgresql+asyncpg://user:password@my-postgres:5432/mydb
+      STREAM_URL: http://stream-container:8001/stream
     ports:
       - "8000:8000"
     depends_on:
       my-postgres:
         condition: service_healthy
-    networks:
-      - my-network
+      stream-container:
+        condition: service_started
 
   stream-container:
     build:
       context: .
-      dockerfile: ./Dockerfile.stream  # Dockerfile 위치 수정
+      dockerfile: Dockerfile.stream
     container_name: stream-container
-    environment:
-      DATABASE_URL: postgresql+asyncpg://user:password@my-postgres:5432/mydb
+    ports:
+      - "8001:8001"
     depends_on:
       my-postgres:
         condition: service_healthy
-    networks:
-      - my-network
-
-networks:
-  my-network:
-    driver: bridge

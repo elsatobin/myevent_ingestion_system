@@ -1,35 +1,66 @@
 import asyncio
-from app.db import AsyncSessionLocal
-from app.models import Event, Checkpoint
+import json
+import logging
+import os
 
-async def get_last_checkpoint(session: AsyncSessionLocal) -> int:
-    # Get the last checkpoint from the database
-    result = await session.get(Checkpoint, "main")
-    return result.last_event_id if result else 0
+import httpx
+from sqlalchemy.future import select
+from sqlalchemy.dialects.postgresql import insert
 
-async def update_checkpoint(session: AsyncSessionLocal, last_id: int):
-    # Update checkpoint in the database
-    cp = await session.get(Checkpoint, "main")
-    if not cp:
-        cp = Checkpoint(id="main", last_event_id=last_id)
-        session.add(cp)
-    else:
-        cp.last_event_id = last_id
-    await session.commit()
+from app.db import get_db
+from app.models import Checkpoint
+from app.services.event_service import process_event
+
+logger = logging.getLogger(__name__)
+
+STREAM_URL = os.getenv("STREAM_URL", "http://stream-container:8001/stream")
+RETRY_DELAY = 5  # seconds between reconnect attempts
+
+
+async def get_checkpoint() -> str | None:
+    async for db in get_db():
+        result = await db.execute(select(Checkpoint).where(Checkpoint.id == "main"))
+        cp = result.scalar_one_or_none()
+        return cp.last_timepoint if cp else None
+
 
 async def consume_stream():
-    # Consume events from a stream
-    async with AsyncSessionLocal() as session:
-        last_id = await get_last_checkpoint(session)
-        print(f"Starting from last_event_id={last_id}")
+    while True:
+        try:
+            last_timepoint = await get_checkpoint()
 
-        while True:
-            # Example: generate new event
-            last_id += 1
-            event = Event(data=f"event-{last_id}")
-            session.add(event)
-            await session.commit()
-            await update_checkpoint(session, last_id)
+            url = STREAM_URL
+            if last_timepoint:
+                url = f"{url}?from_timepoint={last_timepoint}"
+                logger.info(f"Resuming stream from {last_timepoint}")
+            else:
+                logger.info("Starting stream from beginning")
 
-            # Wait before next event
-            await asyncio.sleep(1)
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            event = json.loads(line)
+                        except json.JSONDecodeError:
+                            logger.warning(f"Skipping invalid JSON line: {line}")
+                            continue
+
+                        async for db in get_db():
+                            processed = await process_event(db, event)
+                            if processed:
+                                # Update checkpoint in the same session
+                                stmt = insert(Checkpoint).values(
+                                    id="main", last_timepoint=event["timepoint"]
+                                ).on_conflict_do_update(
+                                    index_elements=["id"],
+                                    set_={"last_timepoint": event["timepoint"]},
+                                )
+                                await db.execute(stmt)
+                                await db.commit()
+
+        except Exception as e:
+            logger.error(f"Stream error: {e}. Reconnecting in {RETRY_DELAY}s...")
+            await asyncio.sleep(RETRY_DELAY)

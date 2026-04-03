@@ -1,15 +1,14 @@
-# Base image
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
 COPY app ./app
+COPY stream_server.py ./
 
-# Run stream consumer
-CMD ["python", "-m", "app.ingestion"]
+ENV PYTHONPATH=/app
+
+# Dockerfile.stream
+CMD ["uvicorn", "stream_server:app", "--host", "0.0.0.0", "--port", "8001"]
