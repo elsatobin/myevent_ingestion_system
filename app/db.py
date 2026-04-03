@@ -1,23 +1,13 @@
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Using PostgreSQL (can switch to SQLite for local testing)
-DATABASE_URL = "postgresql://username:password@my-postgres:5432/dbname"
+DATABASE_URL = "postgresql+asyncpg://user:password@my-postgres:5432/mydb"
 
-# Create engine
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=True)
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+    class_=AsyncSession
+)
 
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base class for models
 Base = declarative_base()
-
-
-# Dependency for FastAPI routes
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

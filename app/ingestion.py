@@ -1,87 +1,35 @@
-import requests
-import time
-from app.db import SessionLocal
-from app.services.event_service import process_event
-from app.models import Checkpoint
+import asyncio
+from app.db import AsyncSessionLocal
+from app.models import Event, Checkpoint
 
-STREAM_URL = "https://example.com/stream"
+async def get_last_checkpoint(session: AsyncSessionLocal) -> int:
+    # Get the last checkpoint from the database
+    result = await session.get(Checkpoint, "main")
+    return result.last_event_id if result else 0
 
-
-def consume_stream():
-    """
-    Continuously consumes event stream with retry + resume logic
-    """
-
-    # --- STEP 1: load checkpoint from DB ---
-    db = SessionLocal()
-
-    try:
-        last_timepoint = get_last_checkpoint(db)
-        # last_timepoint can be None if first run
-    finally:
-        db.close()
-
-    # --- STEP 2: start consuming loop ---
-    while True:
-        try:
-            params = {}
-
-            if last_timepoint:
-                # Resume from last processed point
-                params["from_timepoint"] = last_timepoint
-
-            response = requests.get(STREAM_URL, params=params, stream=True)
-
-            for line in response.iter_lines():
-                if not line:
-                    continue
-
-                event = parse_event(line)
-
-                db = SessionLocal()
-
-                try:
-                    process_event(db, event)
-
-                    # --- STEP 3: update checkpoint AFTER success ---
-                    update_checkpoint(db, event["timepoint"])
-
-                    # keep local variable in sync
-                    last_timepoint = event["timepoint"]
-
-                finally:
-                    db.close()
-
-        except Exception as e:
-            print(f"Error consuming stream: {e}")
-            time.sleep(5)
-
-def parse_event(raw_line):
-    """
-    Converts raw stream line into dict
-    """
-    import json
-    return json.loads(raw_line)
-
-
-def get_last_checkpoint(db):
-    """
-    Load last processed timepoint from DB
-    """
-    cp = db.query(Checkpoint).filter_by(id="main").first()
-    return cp.last_timepoint if cp else None
-
-
-def update_checkpoint(db, timepoint):
-    """
-    Save last processed timepoint to DB
-    """
-    cp = db.query(Checkpoint).filter_by(id="main").first()
-
+async def update_checkpoint(session: AsyncSessionLocal, last_id: int):
+    # Update checkpoint in the database
+    cp = await session.get(Checkpoint, "main")
     if not cp:
-        cp = Checkpoint(id="main", last_timepoint=timepoint)
-        db.add(cp)
+        cp = Checkpoint(id="main", last_event_id=last_id)
+        session.add(cp)
     else:
-        cp.last_timepoint = timepoint
+        cp.last_event_id = last_id
+    await session.commit()
 
-    db.commit()
+async def consume_stream():
+    # Consume events from a stream
+    async with AsyncSessionLocal() as session:
+        last_id = await get_last_checkpoint(session)
+        print(f"Starting from last_event_id={last_id}")
+
+        while True:
+            # Example: generate new event
+            last_id += 1
+            event = Event(data=f"event-{last_id}")
+            session.add(event)
+            await session.commit()
+            await update_checkpoint(session, last_id)
+
+            # Wait before next event
+            await asyncio.sleep(1)

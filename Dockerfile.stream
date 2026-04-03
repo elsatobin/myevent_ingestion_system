@@ -1,12 +1,15 @@
+# Base image
 FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-COPY . .
-
 # Install dependencies
-RUN pip install --upgrade pip && \
-    pip install fastapi uvicorn sqlalchemy psycopg2-binary requests
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Run stream server
-CMD ["python", "-m", "uvicorn", "stream_server:app", "--host", "0.0.0.0", "--port", "8001"]
+# Copy source code
+COPY app ./app
+
+# Run stream consumer
+CMD ["python", "-m", "app.ingestion"]
